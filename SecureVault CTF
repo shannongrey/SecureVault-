@@ -1,0 +1,30 @@
+
+At a virtual sandbox event hosted by Women in Cybersecurity (WiCyS), I had the pleasure of participating on a hands on web app vulnerability lab. We were expected to penetrate SecureVault: a fictional application that was suspected to host an admin user that we wanted to gain access to. This had been my first live sandbox event and the pressure of succeeding within a certain timeframe had made this a challenging yet memorable experience. During the process I ensured to compile a brief write up:
+
+My tools of choice were Burp Suite for intercepting and modifying HTTP requests and responses, and nmap for network scanning. I methodically mapped out the entire application, noting each endpoint, parameter, and feature.
+1. I used nmap to perform a network scan, identifying open ports and services running on the SecureVault server. This helped to understand the server's attack surface and potential entry points. nmap -sV -p- securevault.ctf. The scan merely revealed that the web application was hosted on a standard HTTP port, and there were no other obvious services to exploit directly.
+2. The SecureVault page had a log in form that I then began attempting a brute force attack, inputting common username/password combinations such as `admin/admin` and other expected characters. When that didn’t work, I moved to testing for SQL injection.
+2. I entered typical SQL injection payloads into the username and password fields to see if the application was vulnerable:
+      `' OR 1=1;--`
+     `' UNION SELECT null, null;--`
+      `admin'--`
+3. I intercepted the login request using Burp Suite to understand the structure of the POST request. I then used the Repeater tool to modify the requests, injecting SQL payloads directly into the HTTP request body:
+POST /login HTTP/1.1
+Host: securevault.ctf
+Content-Type: application/x-www-form-urlencoded
+username=admin’--&password=anything
+By carefully analyzing the server's responses, I looked for error messages or anomalies that indicated the backend was processing the injected SQL code. Error messages like `SQL syntax error` or changes in response times were important indicators.
+4. After trying to compromise the log in page form, I noticed there was a password reset feature. I noticed something unusual with the password reset feature, but it wasn't until I confirmed the SQL injection vulnerability on the login page that things started to click.
+ I injected the following payload into the login page using Burp Suite:
+     ' OR '1'='1';--
+ This payload is designed to always evaluate to true, potentially bypassing authentication.
+     I refined this further to see the database of table and column names: 
+’ UNION SELECT table_name, column_name FROM information_schema.columns;--
+  5. I then argeted the `users` table. Using a UNION-based SQL injection, I dumped usernames and password hashes:
+     ' UNION SELECT username, password FROM users;--
+  6. I used John the Ripper to crack the password hashes:
+   
+     john --wordlist=/path/to/wordlist.txt hashes.txt
+    Several weak passwords were exposed, including an admin account.
+
+7. With admin credentials, I logged into the admin panel and discovered the flag.
